@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mclo.gs Log Uploader
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Upload log files to mclo.gs.
 // @author       Navinor
 // @match        *://*/*
