@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mclo.gs Log Uploader
 // @namespace    http://tampermonkey.net/
-// @version      1.0
+// @version      1.1
 // @description  Upload log files to mclo.gs.
 // @author       Navinor
 // @match        *://*/*
@@ -308,7 +308,7 @@
         } else {
             showNotification(
                 'ℹ️ No Log Link Found',
-                'Right-click on a log file link first, then use this menu option.'
+                'Make sure you\'ve right-clicked a link!'
             );
         }
     });
