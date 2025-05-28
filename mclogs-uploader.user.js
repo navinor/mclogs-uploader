@@ -9,6 +9,7 @@
 // @grant        GM.xmlHttpRequest
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
+// @updateURL    https://github.com/navinor/mclogs-uploader/raw/refs/heads/main/mclogs-uploader.user.js
 // @connect      api.mclo.gs
 // @connect      *
 // @run-at       document-body
