@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mclo.gs Log Uploader
 // @namespace    http://tampermonkey.net/
-// @version      1.2
+// @version      1.3
 // @description  Upload log files to mclo.gs.
 // @author       Navinor
 // @match        *://*/*
@@ -9,10 +9,10 @@
 // @grant        GM.xmlHttpRequest
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
-// @updateURL    https://github.com/navinor/mclogs-uploader/raw/refs/heads/main/mclogs-uploader.user.js
 // @connect      api.mclo.gs
 // @connect      *
 // @run-at       document-body
+// @require      https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js
 // ==/UserScript==
 
 (function() {
@@ -129,7 +129,7 @@
             document.body.appendChild(container);
         }
 
-        // uild the toast element
+        // Build the toast element
         const toast = document.createElement('div');
         toast.className = `mclogs-notification${isError ? ' error' : ''}`;
 
@@ -159,6 +159,36 @@
         return msgBox; // caller can still append extra nodes
     }
 
+    async function fetchLogContent(url) {
+    // detect .log.gz (optionally with query-string)
+    if (/\.log\.gz($|\?)/i.test(url)) {
+        // 1️⃣ download raw bytes
+        const buffer = await new Promise((resolve, reject) => {
+            GM.xmlHttpRequest({
+                method: 'GET',
+                url,
+                responseType: 'arraybuffer',
+                onload(res) {
+                    if (res.status === 200) resolve(res.response);
+                    else reject(new Error(`HTTP ${res.status}`));
+                },
+                onerror() { reject(new Error('Network error')); }
+            });
+        });
+
+        // 2️⃣ decompress
+        try {
+            const compressed = new Uint8Array(buffer);
+            return pako.ungzip(compressed, { to: 'string' });
+        } catch (e) {
+            throw new Error('Gzip decompression failed: ' + e.message);
+        }
+    }
+
+    // not gz → regular text fetch
+    return await fetchFileContent(url);
+}
+
     // Send content to mclo.gs API
     function sendToMclogs(content) {
         return new Promise((resolve, reject) => {
@@ -185,7 +215,7 @@
                         return reject(new Error(json?.error || 'Upload failed (unknown cause)'));
                     }
                     if (status === 429) {
-                        const retryAfter = responseHeaders
+                        const retryAfter = (responseHeaders||'')
                         .match(/Retry-After:\s*(\d+)/i)?.[1];
                         const msg = retryAfter
                         ? `Rate limit exceeded – wait ${retryAfter}s and try again.`
@@ -252,8 +282,7 @@
             );
 
             // Fetch the file content
-            const content = await fetchFileContent(linkUrl);
-
+            const content = await fetchLogContent(linkUrl);
             // Send to mclo.gs
             const result = await sendToMclogs(content);
 
@@ -273,7 +302,7 @@
                     'Log uploaded to mclo.gs! URL copied to clipboard: '
                 );
                 msgBox.appendChild(linkEl);
-
+                lastLogLink = null;
                 return;
             } else {
                 throw new Error('Upload failed');
