@@ -18,10 +18,7 @@
 
 (function() {
     'use strict';
-
     let lastLogLink = null;
-
-    // Add custom CSS for our upload button and notifications
 	GM_addStyle(`
 		#mclogs-toast-container {
 			position: fixed;
@@ -101,11 +98,11 @@
 
         // measure new tops & animate the delta
         Array.from(container.children).forEach(el => {
-            const from = firstTops.get(el); // undefined ⇒ brand-new toast
+            const from = firstTops.get(el); 
             if (from === undefined) return;
 
             const to = el.getBoundingClientRect().top;
-            const delta = from - to; // positive = moved up
+            const delta = from - to; 
 
             if (!delta) return; // no movement needed
 
@@ -119,7 +116,7 @@
             });
         });
     }
-    // Create and show custom notification
+	
     function showNotification(title, message, isError = false) {
         // ensure a flexbox container exists
         let container = document.getElementById('mclogs-toast-container');
@@ -161,7 +158,7 @@
     }
 
     async function fetchLogContent(url) {
-        // 1️⃣ .log.gz → download bytes + decompress
+	// gzipped log file
         if (/\.log\.gz($|\?)/i.test(url)) {
             const buffer = await new Promise((resolve, reject) => {
                 GM.xmlHttpRequest({
@@ -186,7 +183,7 @@
             }
         }
 
-        // 2️⃣ plain-text URL → inline GET → text
+        // plain-text URL 
         return await new Promise((resolve, reject) => {
             GM.xmlHttpRequest({
                 method: 'GET',
@@ -205,7 +202,6 @@
         });
     }
 
-    // Send content to mclo.gs API
     function sendToMclogs(content) {
         return new Promise((resolve, reject) => {
             GM.xmlHttpRequest({
@@ -269,7 +265,6 @@
 
     async function handleUploadSource(src) {
         try {
-            // 1. start-up toast
             showNotification(
                 '⏳ Uploading to mclo.gs',
                 /^https?:\/\//.test(src)
@@ -277,16 +272,16 @@
                 : 'Uploading text selection…'
             );
 
-            // 2. fetch/decompress if URL, else use raw text
+            // fetch/decompress if URL, else use raw text
             const content = /^https?:\/\//.test(src)
             ? await fetchLogContent(src)
             : src;
 
-            // 3. push to mclo.gs
+            // push to mclo.gs
             const { success, url } = await sendToMclogs(content);
             if (!success) throw new Error('Upload failed');
 
-            // 4. copy + clickable link
+            // copy + clickable link
             const copied = await copyToClipboard(url);
             const linkEl = document.createElement('a');
             linkEl.href = linkEl.textContent = url;
