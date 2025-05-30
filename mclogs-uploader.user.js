@@ -12,8 +12,8 @@
 // @connect      api.mclo.gs
 // @connect      *
 // @run-at       document-body
-// @updateURL    
-// @downloadURL
+// @updateURL    https://raw.githubusercontent.com/navinor/mclogs-uploader/refs/heads/main/mclogs-uploader.user.js
+// @downloadURL  https://raw.githubusercontent.com/navinor/mclogs-uploader/refs/heads/main/mclogs-uploader.user.js
 // @require      https://cdn.jsdelivr.net/npm/pako@2.1.0/dist/pako.min.js
 // ==/UserScript==
 
