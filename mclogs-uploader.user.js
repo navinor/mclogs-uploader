@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mclo.gs Log Uploader
 // @namespace    http://tampermonkey.net/
-// @version      1.4
+// @version      1.5
 // @description  Upload log files to mclo.gs.
 // @author       Navinor
 // @match        *://*/*
@@ -10,7 +10,6 @@
 // @grant        GM_addStyle
 // @grant        GM_registerMenuCommand
 // @connect      api.mclo.gs
-// @connect      *
 // @run-at       document-body
 // @updateURL    https://raw.githubusercontent.com/navinor/mclogs-uploader/refs/heads/main/mclogs-uploader.user.js
 // @downloadURL  https://raw.githubusercontent.com/navinor/mclogs-uploader/refs/heads/main/mclogs-uploader.user.js
@@ -151,7 +150,7 @@
 
         // auto-dismiss after 5 s, then FLIP again so others slide up
         setTimeout(() => {
-            toast.style.transition = '';
+            toast.style.transition = 'all 0.3s ease';
             toast.classList.add('slideout');
             setTimeout(() => {
                 flipStack(container, () => toast.remove());
@@ -162,34 +161,49 @@
     }
 
     async function fetchLogContent(url) {
-    // detect .log.gz (optionally with query-string)
-    if (/\.log\.gz($|\?)/i.test(url)) {
-        // download bytes
-        const buffer = await new Promise((resolve, reject) => {
+        // 1️⃣ .log.gz → download bytes + decompress
+        if (/\.log\.gz($|\?)/i.test(url)) {
+            const buffer = await new Promise((resolve, reject) => {
+                GM.xmlHttpRequest({
+                    method: 'GET',
+                    url,
+                    responseType: 'arraybuffer',
+                    onload(res) {
+                        if (res.status === 200) resolve(res.response);
+                        else reject(new Error(`HTTP ${res.status}`));
+                    },
+                    onerror() {
+                        reject(new Error('Network error'));
+                    }
+                });
+            });
+
+            try {
+                const compressed = new Uint8Array(buffer);
+                return pako.ungzip(compressed, { to: 'string' });
+            } catch (e) {
+                throw new Error('Gzip decompression failed: ' + e.message);
+            }
+        }
+
+        // 2️⃣ plain-text URL → inline GET → text
+        return await new Promise((resolve, reject) => {
             GM.xmlHttpRequest({
                 method: 'GET',
                 url,
-                responseType: 'arraybuffer',
                 onload(res) {
-                    if (res.status === 200) resolve(res.response);
-                    else reject(new Error(`HTTP ${res.status}`));
+                    if (res.status === 200) {
+                        resolve(res.responseText);
+                    } else {
+                        reject(new Error(`HTTP ${res.status}`));
+                    }
                 },
-                onerror() { reject(new Error('Network error')); }
+                onerror() {
+                    reject(new Error('Network error'));
+                }
             });
         });
-
-        // decompress
-        try {
-            const compressed = new Uint8Array(buffer);
-            return pako.ungzip(compressed, { to: 'string' });
-        } catch (e) {
-            throw new Error('Gzip decompression failed: ' + e.message);
-        }
     }
-
-    // else, regular text fetch
-    return await fetchFileContent(url);
-}
 
     // Send content to mclo.gs API
     function sendToMclogs(content) {
@@ -235,29 +249,9 @@
         });
     }
 
-    // Fetch file content
-    function fetchFileContent(url) {
-        return new Promise((resolve, reject) => {
-            GM.xmlHttpRequest({
-                method: 'GET',
-                url: url,
-                onload: function(response) {
-                    if (response.status === 200) {
-                        resolve(response.responseText);
-                    } else {
-                        reject(new Error(`HTTP error! status: ${response.status}`));
-                    }
-                },
-                onerror: function(response) {
-                    reject(new Error('Failed to fetch file'));
-                }
-            });
-        });
-    }
-
     async function copyToClipboard(text) {
         try {
-            GM_setClipboard(text, { type: 'text', mimetype: 'text/plain' });
+            GM_setClipboard(text, { type:'text', mimetype:'text/plain', reselect:true});
             return true;
         } catch (err) {
             if (navigator.clipboard?.writeText) {
@@ -273,77 +267,64 @@
         }
     }
 
-
-
-    // Handle the upload process
-    async function handleUpload(linkUrl) {
+    async function handleUploadSource(src) {
         try {
+            // 1. start-up toast
             showNotification(
                 '⏳ Uploading to mclo.gs',
-                'Downloading and uploading log file...'
+                /^https?:\/\//.test(src)
+                ? 'Downloading and uploading log file…'
+                : 'Uploading text selection…'
             );
 
-            // Fetch the file content
-            const content = await fetchLogContent(linkUrl);
-            // Send to mclo.gs
-            const result = await sendToMclogs(content);
+            // 2. fetch/decompress if URL, else use raw text
+            const content = /^https?:\/\//.test(src)
+            ? await fetchLogContent(src)
+            : src;
 
-            if (result.success) {
-                // Copy URL to clipboard
-                const copied = await copyToClipboard(result.url);
+            // 3. push to mclo.gs
+            const { success, url } = await sendToMclogs(content);
+            if (!success) throw new Error('Upload failed');
 
-                // Build link
-                const linkEl = document.createElement('a');
-                linkEl.href = result.url;
-                linkEl.textContent = result.url;
-                linkEl.target = '_blank';
-                linkEl.rel = 'noopener noreferrer';
+            // 4. copy + clickable link
+            const copied = await copyToClipboard(url);
+            const linkEl = document.createElement('a');
+            linkEl.href = linkEl.textContent = url;
+            linkEl.target = '_blank'; linkEl.rel = 'noopener noreferrer';
 
-                const msgBox = showNotification(
-                    '✅ Upload Successful!',
-                    'Log uploaded to mclo.gs! URL copied to clipboard: '
-                );
-                msgBox.appendChild(linkEl);
-                lastLogLink = null;
-                return;
-            } else {
-                throw new Error('Upload failed');
-            }
-
-        } catch (error) {
-            console.error('Error uploading to mclo.gs:', error);
-            showNotification(
-                '❌ Upload Failed',
-                `Failed to upload log: ${error.message}`,
-                true
+            const msgBox = showNotification(
+                '✅ Upload Successful!',
+                copied
+                ? 'URL copied to clipboard: '
+                : 'Upload done! Copy URL: '
             );
+            msgBox.appendChild(linkEl);
+
+            lastLogLink = null;
+        } catch (err) {
+            console.error(err);
+            showNotification('❌ Upload Failed', err.message, true);
         }
     }
 
-
-    // Track last right-clicked link
-    document.addEventListener(
-        'contextmenu',
-        e => {
-            const link = e.target.closest('a');
-            if (link && link.href && isLogFile(link.href)) {
-                lastLogLink = link.href;
-            }
-        },
-        { capture: false, passive: true }
-    );
-
-    // Register menu command for uploading right-clicked log link
-    GM_registerMenuCommand("📤 Upload to mclo.gs", function() {
-        if (lastLogLink) {
-            handleUpload(lastLogLink);
+    GM_registerMenuCommand("📤 Upload to mclo.gs", () => {
+        const sel = window.getSelection().toString().trim();
+        const src = lastLogLink || sel;
+        if (src) {
+            handleUploadSource(src);
         } else {
             showNotification(
-                'ℹ️ No Log Link Found',
-                'Make sure you\'ve right-clicked a link!'
+                'ℹ️ Nothing to upload',
+                'Right-click a log link or select text first.'
             );
         }
     });
+
+    document.addEventListener('contextmenu', e => {
+        const a = e.target.closest('a');
+        if (a && isLogFile(a.href)) lastLogLink = a.href;
+    }, { passive: true });
+
 
     console.log('mclo.gs Log Uploader registered.');
 })();
