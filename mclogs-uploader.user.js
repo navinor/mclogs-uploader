@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         mclo.gs Log Uploader
 // @namespace    http://tampermonkey.net/
-// @version      1.3
+// @version      1.4
 // @description  Upload log files to mclo.gs.
 // @author       Navinor
 // @match        *://*/*
@@ -164,7 +164,7 @@
     async function fetchLogContent(url) {
     // detect .log.gz (optionally with query-string)
     if (/\.log\.gz($|\?)/i.test(url)) {
-        // 1️⃣ download raw bytes
+        // download bytes
         const buffer = await new Promise((resolve, reject) => {
             GM.xmlHttpRequest({
                 method: 'GET',
@@ -178,7 +178,7 @@
             });
         });
 
-        // 2️⃣ decompress
+        // decompress
         try {
             const compressed = new Uint8Array(buffer);
             return pako.ungzip(compressed, { to: 'string' });
@@ -187,7 +187,7 @@
         }
     }
 
-    // not gz → regular text fetch
+    // else, regular text fetch
     return await fetchFileContent(url);
 }
 
